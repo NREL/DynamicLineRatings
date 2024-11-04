@@ -10,7 +10,6 @@ io = os.path.join(data, 'io')
 ## Data files
 ### In the repo
 regional_assumptions = os.path.join(data, 'regional_assumptions.csv')
-acsr = os.path.join(data,' conductors', 'southwire_acsr.csv')
 ### Downloaded from external sources
 downloads = os.path.join(data, 'downloads')
 #### https://hifld-geoplatform.hub.arcgis.com/datasets/geoplatform::transmission-lines
