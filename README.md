@@ -16,4 +16,4 @@
         ```
 
 ## Example usage
-See analysis/example.py for a complete example.
+See [analysis/example.py](https://github.com/NREL/DynamicLineRatings/blob/main/analysis/example.py) for a complete example.
