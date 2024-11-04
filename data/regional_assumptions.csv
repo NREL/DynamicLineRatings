@@ -1,0 +1,26 @@
+﻿transreg,transmission_provider,representative,ambient_temp_summer_celsius,ambient_temp_winter_celsius,windspeed_summer_fps,windspeed_winter_fps,windangle_deg,conductor_acsr_temp_celsius,solar_radiation_summer_watts_per_square_meter,solar_radiation_winter_watts_per_square_meter,emissivity,absorptivity,source
+ERCOT,CenterPoint,,36,,2,,90,75,794.93,,0.7,0.9,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+ERCOT,TNP,,25,,2,,90,67.5,913.67,,0.5,0.5,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+ERCOT,CPS,,25,,2.05,,,75,,,0.5,0.5,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+ERCOT,LCRA,,40.55,,2,,90,93.33,1026.8,,0.5,0.5,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+ERCOT,Austin Energy,,40,,2,,,90,,,0.5,0.5,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+ERCOT,STEC,,40.55,,2.05,,90,67.5,1014,,0.4,0.4,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+ERCOT,TXUED,,40,,2,,90,90,1023.91,,0.5,0.5,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+ERCOT,BPUB,,25,,2,,90,67.5,913.67,,0.5,0.5,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+ERCOT,AEP,1,40,20,2.93,,60,85,,,0.8,0.8,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+ERCOT,TMPA,,25,,2.05,,,67.5,1000,,,,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+ERCOT,Garland,,40,,2,,90,90,1023.91,,0.5,0.5,https://www.ercot.com/files/docs/2006/08/01/13d._sswgproceduremanual_081006.doc
+PJM,PJM,1,35,10,0,,90,100,689.18,,0.7,0.9,https://www.pjm.com/~/media/planning/design-engineering/maac-standards/bare-overhead-transmission-conductor-ratings.ashx
+ISONE,ISONE,1,38,10,3,,90,,,,0.75,0.6,https://www.iso-ne.com/static-assets/documents/rules_proceds/isone_plan/pp07/pp7_final.pdf
+ISONE,Unitil Energy Systems,,37.8,10,3,,90,80,916.39,,0.75,0.5,https://www.puc.nh.gov/regulatory/Docketbk/2020/20-002/INITIAL%20FILING%20-%20PETITION/20-002_2020-04-03_UES_2020_LEAST_COST_INTEGRATED_RESOURCE_PLAN.PDF
+NYISO,NYISO,1,35,10,3,,90,95,987.53,702.81,0.6,0.6,https://www.nyiso.com/documents/20142/1402024/NYTO-2019-Tie-Line-Report-V01-2020-January-9.pdf/7029e9e9-3f76-5355-5646-8b1f18699750
+SERTP,ProgressEnergyCarolinas,1,33.52,20.19,2.33,2.33,90,100,1030.14,515.07,0.5,0.5,http://www.oatioasis.com/CPL/CPLdocs/FacilitiesRatingsMethodology.pdf
+SPP,SPP,1,40,10,2,,90,85,1000,,0.9,1,https://www.spp.org/documents/69546/spp%20planning%20criteria%20v4.1.pdf
+CAISO,SCE,1,40,40,2,,90,90,1000,,0.8,0.8,https://www.sce.com/sites/default/files/custom-files/Web%20files/SCE_InterconnectionHandbook.pdf
+MISO,Hoosier Energy,,32,0,3.23,,90,76.67,,,0.8,0.8,https://www.in.gov/iurc/files/Hoosier_Energy_IRP_-_44559_-_Public_Version_-_Volume_III.pdf
+MISO,MidAmerican Energy Company,1,37.78,0,7,,20,100,908.31,658.3,0.5,0.5,http://www.oasis.oati.com/woa/docs/MEC/MECdocs/MidAmerican_100_kV_and_Above_Transmission_Facility_Ratings_Methodology_Version_3-8_2023-12-28.pdf
+MISO,American Transmission Company,,32.2,3.3,1.2,1.15,90,93,1027.84,816.38,0.8,0.8,https://www.atc10yearplan.com/2011/documents/CR-0061.pdf
+NorthernGrid,Nevada Power Company,1,44.4,,2,,90,75,807.8,,0.7,0.8,http://www.oasis.oati.com/NEVP/NEVPdocs/FAC-008-3.pdf
+NorthernGrid,Sierra Pacific Power Company,,40,,2,,90,75,891.89,,0.7,0.8,http://www.oasis.oati.com/NEVP/NEVPdocs/FAC-008-3.pdf
+WestConnect,Southwest Transmission Cooperative,1,40,,3,,90,93.3,1152.25,970.02,0.9,0.9,https://images.edocket.azcc.gov/docketpdf/0000122622.pdf
+FRCC,Duke Energy Florida,1,35,4.44,2.5,,60,105,950,,0.5,0.5,http://www.oatioasis.com/fpc/fpcdocs/engr-trmf-00001_rev_10.pdf

@@ -1,0 +1,22 @@
+# pyc files
+*.pyc
+*__pycache__
+
+# jupyter notebook checkpoints
+*.ipynb_checkpoints*/
+
+# mac stuff
+*.DS_Store
+
+# Julia stuff
+Manifest.toml
+
+# IDE stuff
+*.vscode
+
+# Untracked data files
+/data/downloads
+/data/io
+
+# Output results
+/outputs

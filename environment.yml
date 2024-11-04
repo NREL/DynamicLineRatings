@@ -1,0 +1,36 @@
+name: dlr
+channels:
+  - defaults
+  - nrel
+  - conda-forge
+dependencies:
+  - python=3.11.9
+  - click=8.0
+  - git-lfs=2.13
+  - h5py=3.9
+  - h5pyd=0.16
+  - numpy=1.26
+  - pandas=2.0
+  - pip=23.2
+  - pytables=3.8
+  - scipy=1.11
+  - gitpython=3.1 # for complete run metadata
+  - ipykernel=6.25 # for interactive python in VS Code
+  - ipywidgets=8.0 # for jupyter notebooks
+  - matplotlib=3.7 # for plots
+  - mscorefonts=0.0 # extra fonts for plotting (only relevant on linux)
+  - nb_conda=2.2 # for conda environments in jupyter notebooks
+  - notebook=6.5 # for jupyter notebooks
+  - pytest=7.4 # for testing ReEDS-to-X compatibility
+  - requests=2.31 # for the internet
+  - tqdm=4.65 # for progress bars
+  - nrel-rex=0.2.90 # for NSRDB and WTK
+  - rasterio=1.3 # for average wind speed
+  - pip:
+    - cmocean==3.0.3 # for more plotting colors
+    - fiona==1.9.5 # for plotting maps
+    - folium==0.14.0 # for interactive maps
+    - geopandas==0.14.0 # for region aggregation and plotting maps
+    - proj==0.2.0 # for plotting maps
+    - pyproj==3.6.1 # for plotting maps
+    - shapely==2.0.1 # for plotting maps
