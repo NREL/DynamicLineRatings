@@ -27,5 +27,6 @@ ratings = os.path.join(outputs, 'ratings')
 figures = os.path.join(outputs, 'figures', datetime.datetime.now().strftime('%Y%m%d'))
 
 ## Make untracked folders
+os.makedirs(io, exist_ok=True)
 os.makedirs(downloads, exist_ok=True)
 os.makedirs(ratings, exist_ok=True)

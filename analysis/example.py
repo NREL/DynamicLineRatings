@@ -1,3 +1,9 @@
+"""
+Notes
+- Sometimes the WTK/NSRDB data download in linerating.get_weather_h5py() can hang;
+if it does, wait a few minutes and try again.
+"""
+
 #%% Imports
 import os
 import sys
@@ -5,13 +11,10 @@ import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import geopandas as gpd
-import fiona
 ## Local
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dlr import helpers
 from dlr import linerating
-from dlr import paths
 from dlr import plots
 from dlr import physics
 
@@ -25,37 +28,40 @@ pd.options.display.max_rows = 30
 height = 10
 years = range(2007,2014)
 
-#%% Get test lines
-fiona.supported_drivers['KML'] = 'rw'
-dflines = (
-    gpd.read_file(os.path.join(paths.data,'test_lines.kml'), driver='KML')
-    .rename(columns={'Name':'ID'})
-    .to_crs('ESRI:102008')
-    .assign(VOLTAGE=230)
-)
-dflines = helpers.lookup_diameter_resistance(dflines).set_index('ID')
-## Get SLR for comparison
-dflines['SLR'] = physics.ampacity(
-    diameter_conductor=dflines.diameter,
-    resistance_conductor=dflines.resistance,
-)
-
-# #%% Or get some HIFLD lines from a given state
-# _dflines = helpers.get_hifld()
-# dfstates =  helpers.get_reeds_zones()['st']
-# state = 'CO'
-# statebounds = dfstates.loc[[state]].statebounds.squeeze()
-# dflines = _dflines.loc[
-#     (_dflines.length_miles >= 5)
-#     & (_dflines.rep_voltage == 230)
-#     & (_dflines.statebounds.maxy <= statebounds.maxy)
-#     & (_dflines.statebounds.maxx <= statebounds.maxx)
-#     & (_dflines.statebounds.minx >= statebounds.minx)
-#     & (_dflines.statebounds.miny >= statebounds.miny)
-# ].sample(5, random_state=1)
+#%% Get some HIFLD lines from a given state (need to download the HIFLD data first)
+_dflines = helpers.get_hifld()
+dfstates =  helpers.get_reeds_zones()['st']
+state = 'CO'
+statebounds = dfstates.loc[[state]].bounds.squeeze()
+dflines = _dflines.loc[
+    (_dflines.length_miles >= 5)
+    & (_dflines.rep_voltage == 230)
+    & (_dflines.bounds.maxy <= statebounds.maxy)
+    & (_dflines.bounds.maxx <= statebounds.maxx)
+    & (_dflines.bounds.minx >= statebounds.minx)
+    & (_dflines.bounds.miny >= statebounds.miny)
+].sample(4, random_state=1)
 
 # #%% Or get a specific HIFLD line
 # dflines = helpers.get_hifld().loc[['202132']].copy()
+
+# #%% Or get user-defined line routes (e.g. exported as .kml from Google Earth)
+# import fiona
+# import geopandas as gpd
+# from dlr import paths
+# fiona.supported_drivers['KML'] = 'rw'
+# dflines = (
+#     gpd.read_file(os.path.join(paths.data,'test_lines.kml'), driver='KML')
+#     .rename(columns={'Name':'ID'})
+#     .to_crs('ESRI:102008')
+#     .assign(VOLTAGE=230)
+# )
+# dflines = helpers.lookup_diameter_resistance(dflines).set_index('ID')
+# ## Get SLR for comparison
+# dflines['SLR'] = physics.ampacity(
+#     diameter_conductor=dflines.diameter,
+#     resistance_conductor=dflines.resistance,
+# )
 
 
 #%% Get WTK and NSRDB cells
@@ -64,7 +70,7 @@ meta = helpers.get_grids()
 ## Output container
 ratings = {}
 
-#%%### Full dynamic line rating, including wind speed and direction
+#%%### Full dynamic line rating, including irradiance and wind speed/direction
 method = 'DLR'
 ratings[method] = {}
 for iline, line in dflines.iterrows():
@@ -136,14 +142,9 @@ for iline, line in dflines.iterrows():
     ratings[method][line.name] = cell_ampacity.min(axis=1)
 
 
-#%%### DLR but with clear-sky irradiance, always-parallel wind (worst case), and
-###### forecast margin adjustments for temperature and wind speed
-method = 'FLR'
-defaults = {'wind_conductor_angle': 0}
-forecast_margin = {
-    'windspeed': -2, # m/s
-    'temp_ambient_air': +2, # °C or K
-}
+#%%### Ambient-temperature-adjusted ratings
+method = 'ALR'
+defaults = {'ghi':1000, 'windspeed': 0, 'wind_conductor_angle': 90}
 ratings[method] = {}
 for iline, line in dflines.iterrows():
     ### Get grid cells
@@ -154,7 +155,7 @@ for iline, line in dflines.iterrows():
     dfweather = linerating.get_weather_h5py(
         line=line,
         meta=meta,
-        weatherlist=['temperature','windspeed','pressure','clearsky_ghi'],
+        weatherlist=['temperature'],
         years=years,
         verbose=1,
     )
@@ -163,14 +164,12 @@ for iline, line in dflines.iterrows():
     cell_ampacity = {}
     for (i_wtk, i_nsrdb) in cell_combinations.index:
         cell_ampacity[(i_wtk, i_nsrdb)] = physics.ampacity(
-            windspeed=dfweather['windspeed'][i_wtk],
+            windspeed=defaults['windspeed'],
             wind_conductor_angle=defaults['wind_conductor_angle'],
             temp_ambient_air=(dfweather['temperature'][i_wtk] + physics.C2K),
-            pressure=dfweather['pressure'][i_wtk],
-            solar_ghi=dfweather['clearsky_ghi'][i_nsrdb],
+            solar_ghi=defaults['ghi'],
             diameter_conductor=line.diameter,
             resistance_conductor=line.resistance,
-            forecast_margin=forecast_margin,
         )
     cell_ampacity = pd.concat(cell_ampacity, axis=1)
     ratings[method][line.name] = cell_ampacity.min(axis=1)
@@ -178,7 +177,7 @@ for iline, line in dflines.iterrows():
 
 #%%### Take a look
 ### Distribution of ratings
-methods = ['CLR','DLR','FLR']
+methods = ['ALR','CLR','DLR']
 colors = plots.rainbowmapper(dflines.index)
 ncols = len(methods)
 plt.close()
@@ -200,23 +199,30 @@ ax[0].set_xlabel('Percent of hours above y-axis value [%]', x=0, ha='left')
 plots.despine(ax)
 plt.show()
 
-#%% Maps
-state = helpers.get_reeds_zones()['st'].loc[['CO']]
+
+###### Maps
+#%% Whole state
+dfstate = helpers.get_reeds_zones()['st'].loc[[state]]
 plt.close()
-f, ax = plt.subplots(1, 2, figsize=(10, 5))
-## Zoomed out
-state.plot(ax=ax[0], facecolor='none', edgecolor='k', lw=0.5)
-dflines.plot(ax=ax[0], color='C3', lw=1)
-## Zoomed in, with weather grid cells
+f, ax = plt.subplots()
+dfstate.plot(ax=ax, facecolor='none', edgecolor='k', lw=0.5)
+dflines.plot(ax=ax, color='C3', lw=1)
+ax.axis('off')
+plt.show()
+
+#%% Individual lines with weather grid cells
 colors = {'wtk':'C0', 'nsrdb':'C1'}
 alpha = 0.3
-for iline, line in dflines.iterrows():
+ncols = min(len(dflines), 5)
+plt.close()
+f,ax = plt.subplots(1,ncols,figsize=(2.5*ncols, 2.5))
+for col, (iline, line) in enumerate(dflines.iterrows()):
     keep_cells = linerating.get_cells(line=line, meta=meta, buffer_km=10)
     cell_combinations = linerating.get_cell_overlaps(keep_cells=keep_cells)
     for data, c in colors.items():
-        keep_cells[data].plot(ax=ax[1], alpha=alpha, facecolor=c, edgecolor=c, lw=0.5)
-    cell_combinations.plot(ax=ax[1], facecolor='none', edgecolor='k', lw=0.5)
-dflines.plot(ax=ax[1], color='C3', lw=1.0)
+        keep_cells[data].plot(ax=ax[col], alpha=alpha, facecolor=c, edgecolor=c, lw=0.5)
+    cell_combinations.plot(ax=ax[col], facecolor='none', edgecolor='k', lw=0.5)
+    dflines.iloc[[col]].plot(ax=ax[col], color='C3', lw=1.0)
 
 handles = [
     mpl.patches.Patch(
@@ -225,13 +231,13 @@ handles = [
     ) for data in colors
 ] + [
     mpl.lines.Line2D([], [], color='k', label='Weather cell combinations'),
-    mpl.lines.Line2D([], [], color='C3', label='Test lines'),
+    mpl.lines.Line2D([], [], color='C3', label='Modeled lines'),
 ]
-ax[1].legend(
-    handles=handles, loc='lower left', frameon=False, bbox_to_anchor=(-0.1,-0.25),
+ax[-1].legend(
+    handles=handles, loc='center left', frameon=False, bbox_to_anchor=(1,0.5),
     handlelength=0.75, handletextpad=0.5,
 )
 
-for col in range(2):
+for col in range(ncols):
     ax[col].axis('off')
 plt.show()

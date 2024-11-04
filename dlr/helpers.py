@@ -250,6 +250,7 @@ def get_grids(verbose=False, buffer=40, offshore=True):
         (not os.path.exists(paths.meta_nsrdb))
         or (not os.path.exists(paths.meta_wtk))
     ):
+        print('Downloading and caching NSRDB/WTK points (subsequent calls will be faster)')
         nsrdb_fpath = "/nrel/nsrdb/v3/nsrdb_2012.h5"
         with h5pyd.File(nsrdb_fpath, 'r') as f:
             if verbose:
@@ -578,8 +579,8 @@ def get_hifld(
     ### Get HIFLD
     if not os.path.exists(fpath):
         err = (
-            "Download HIFLD data from "
-            "https://hifld-geoplatform.hub.arcgis.com/datasets/geoplatform::transmission-lines"
+            "Download HIFLD shapefile from "
+            "https://hifld-geoplatform.hub.arcgis.com/datasets/geoplatform::transmission-lines "
             f"and unzip to {fpath}"
         )
         raise Exception(err)
