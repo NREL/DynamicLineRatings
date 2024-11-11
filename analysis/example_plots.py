@@ -9,7 +9,6 @@ from rex import WindX, NSRDBX
 ## Local
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dlr import physics
-from dlr import paths
 from dlr import plots
 
 ### Format plots
@@ -20,8 +19,6 @@ temp_conductor = 75 + physics.C2K
 diameter_conductor = 0.03
 absorptivity_conductor = 0.8
 emissivity_conductor = 0.8
-figpath = paths.figures
-os.makedirs(figpath, exist_ok=True)
 FOOT_PER_METER = 3.28084
 
 
@@ -314,7 +311,6 @@ ax[0,0].set_ylabel("Thermal flux\nfrom conductor [W/m]")
 ax[1,0].set_ylabel("Ampacity [A]")
 # ax[0].set_ylim(0)
 plots.despine(ax)
-plt.savefig(os.path.join(figpath,'sensitivity-weather.png'))
 plt.show()
 
 
@@ -488,5 +484,4 @@ ax[1,0].set_ylim(0)
 ax[0,0].set_ylabel("Thermal flux\nfrom conductor [W/m]")
 ax[1,0].set_ylabel("Ampacity [A]")
 plots.despine(ax)
-plt.savefig(os.path.join(figpath,'sensitivity-conductor.png'))
 plt.show()
