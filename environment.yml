@@ -19,6 +19,7 @@ dependencies:
   - numpy=2.1
   - pandas=2.2
   - pip=24.3
+  - proj-data=1.19
   - proj=9.5
   - pyproj=3.7
   - pytables=3.10
