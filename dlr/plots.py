@@ -556,3 +556,79 @@ def plotyearbymonth(dfs, plotcols=None, colors=None,
         # ax[0].set_ylim(0,dfs[plotcols].max())
     
     return f, ax
+
+
+def plot_windrose(
+    dfwind,
+    dfdir,
+    speedspacing=3,
+    maxspeed=15,
+    directionbinwidth=15,
+    title=None,
+    cmap=plt.cm.YlGnBu,
+    ax=None,
+    legend_kwargs={},
+):
+    ### Input parsing
+    binedge = directionbinwidth / 2
+    windbins = np.arange(0, maxspeed+0.001, speedspacing)
+    directions = np.arange(0, 360, directionbinwidth)
+    ### Get histograms
+    dicthist = {}
+    for direction in directions:
+        if direction == 0:
+            datetimes = dfdir.loc[
+                ((direction - binedge + 360) % 360 <= dfdir)
+                | (dfdir < (direction + binedge) % 360)
+            ].index
+        else:
+            datetimes = dfdir.loc[
+                ((direction - binedge + 360) % 360 <= dfdir)
+                & (dfdir < (direction + binedge) % 360)
+            ].index
+        dicthist[direction] = np.histogram(dfwind.loc[datetimes], bins=windbins)[0]
+
+    dfplot = (
+        pd.DataFrame(dicthist, index=windbins[:-1])
+        .rename_axis(index='windspeed', columns='direction')
+        .cumsum()
+    )
+
+    colors = rainbowmapper(dfplot.index, cmap)
+
+    ### Plot it
+    if ax is None:
+        plt.close()
+        f,ax = plt.subplots(subplot_kw={'projection':'polar'})
+    for windspeed, row in dfplot.iloc[::-1].iterrows():
+        if windspeed == dfplot.index[-1]:
+            label = f"{windspeed:.0f}+ m/s"
+        else:
+            label = f"{windspeed:.0f}–{windspeed+speedspacing:.0f} m/s"
+        ax.bar(
+            x=np.radians(row.index),
+            height=row.values,
+            width=np.radians(directionbinwidth),
+            label=label,
+            color=colors[windspeed],
+            lw=0,
+        )
+    ## Legend
+    if len(legend_kwargs) == 0:
+        _legend_kwargs = {
+            'loc':'upper left', 'bbox_to_anchor':(1, 1.1),
+            'handletextpad':0.3, 'handlelength':0.7,
+        }
+    else:
+        _legend_kwargs = legend_kwargs
+    ax.legend(**_legend_kwargs)
+    ## Formatting
+    ax.set_yticklabels([])
+    ax.set_xticks(np.radians(np.arange(0,360,45)))
+    ax.set_xticklabels(['N','NE','E','SE','S','SW','W','NW'])
+    ax.set_theta_zero_location('N')
+    ax.set_theta_direction(-1)
+    ax.set_title(title)
+    ax.grid(ls=':')
+
+    return ax
