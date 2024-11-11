@@ -6,15 +6,18 @@ import os
 import sys
 import requests
 import zipfile
+import h5py
 from tqdm import tqdm
 import geopandas as gpd
 import h5pyd
+import pyproj
 ## Local
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import physics
 import paths
 import plots
 
+pyproj.network.set_network_enabled(False)
 os.environ['USE_PYGEOS'] = '0'
 
 #%% Constants
@@ -588,7 +591,9 @@ def get_hifld(
     dflines = read_lines(fpath, crs='ESRI:102008')
     _dfhifld = (
         lookup_diameter_resistance(dflines=dflines)
-        .set_index('ID').loc[hifld_ids]
+        .astype({'ID':int})
+        .set_index('ID')
+        .loc[hifld_ids]
     )
     ## Downselect to US
     dfhifld = _dfhifld.loc[
@@ -727,6 +732,124 @@ def get_lines_and_ratings(
         return dfhifld, dfin
     else:
         raise IndexError(err)
+
+
+def get_ratings(
+    fpath: str,
+    timestamps: list | str | pd.Timestamp | None = None,
+    ids: list | int | None = None,
+    report_missing: bool = False,
+):
+    """
+    Data file specified by fpath is expected to be in the format used at
+    https://data.openei.org/submissions/6231.
+    Returns float if a single value, pd.Series if a single timestamp or line, or
+    pd.DataFrame if more than one timestamp and line.
+    """
+    if not os.path.exists(fpath):
+        raise FileNotFoundError(
+            f"{fpath} not found. Download data from "
+            "https://data.openei.org/submissions/6231 and direct fpath to one of the "
+            "{}_SLR_ratio-{}.h5 files."
+        )
+    all_ids = False
+    all_timestamps = False
+    if timestamps is None:
+        _timestamps = pd.date_range(
+            '2007-01-01', '2014-01-01', inclusive='left', freq='h', tz='UTC',
+        )
+        all_timestamps = True
+    elif isinstance(timestamps, str):
+        _timestamps = [pd.Timestamp(timestamps).tz_convert('UTC')]
+    elif isinstance(timestamps, pd.Timestamp):
+        _timestamps = [timestamps.tz_convert('UTC')]
+    else:
+        _timestamps = [
+            pd.Timestamp(t).tz_convert('UTC') for t in timestamps
+        ]
+
+    min_t = pd.Timestamp('2007-01-01 00:00+00')
+    max_t = pd.Timestamp('2013-12-31 23:00+00')
+    assert all([(t >= min_t) and (max_t >= t) for t in _timestamps]), (
+        "timestamps must be between 2007-01-01 00:00+00 and 2013-12-31 23:00+00"
+    )
+
+    with h5py.File(fpath, 'r') as h:
+        columns = pd.Series(h['columns'])
+        column_ids = columns.values
+        if report_missing and (ids is not None):
+            missing = [i for i in ids if i not in column_ids]
+            if len(missing):
+                print(f"missing {len(missing)} from results")
+        id2index = pd.Series(columns.index, index=column_ids)
+        if ids is None:
+            all_ids = True
+            keepcols = id2index
+        elif isinstance(ids, int):
+            keepcols = id2index.loc[[ids]]
+        else:
+            keepcols = id2index.reindex(ids).dropna().astype(int)
+        timeindex2index = pd.Series(
+            index=pd.to_datetime(pd.Series(h['index']).map(lambda x: x.decode())),
+            data=range(len(h['index'])),
+        ).tz_localize('UTC')
+        keepindex = timeindex2index.loc[_timestamps]
+        ### Special cases for all_ids and all_timestamps are for faster indexing
+        if (len(_timestamps) > 1) and (len(keepcols) > 1):
+            if all_ids and all_timestamps:
+                dfout = pd.DataFrame(
+                    columns=keepcols.index,
+                    index=_timestamps,
+                    data=h['data'][...],
+                ).rename_axis(index='time_index', columns='ID')
+            elif all_ids:
+                dfout = pd.DataFrame(
+                    columns=keepcols.index,
+                    index=_timestamps,
+                    data=h['data'][keepindex.values, :],
+                )
+            elif all_timestamps:
+                dfout = pd.DataFrame(
+                    columns=keepcols.index,
+                    index=_timestamps,
+                    data=h['data'][:, keepcols.values],
+                )
+            else:
+                dfout = pd.DataFrame(
+                    columns=keepcols.index,
+                    index=_timestamps,
+                    data=h['data'][keepindex.values, keepcols.values],
+                )
+        elif len(keepcols) > 1:
+            if all_ids:
+                dfout = pd.Series(
+                    h['data'][keepindex.values[0], :],
+                    index=keepcols.index,
+                    name=_timestamps[0],
+                ).rename_axis('ID')
+            else:
+                dfout = pd.Series(
+                    h['data'][keepindex.values[0], keepcols.values],
+                    index=keepcols.index,
+                    name=_timestamps[0],
+                ).rename_axis('ID')
+        elif len(_timestamps) > 1:
+            if all_timestamps:
+                dfout = pd.Series(
+                    h['data'][:, keepcols.values[0]],
+                    index=_timestamps,
+                    name=keepcols.index[0],
+                ).rename_axis('time_index')
+            else:
+                dfout = pd.Series(
+                    h['data'][keepindex.values, keepcols.values[0]],
+                    index=_timestamps,
+                    name=keepcols.index[0],
+                ).rename_axis('time_index')
+        else:
+            dfout = h['data'][keepindex.values[0], keepcols.values[0]]
+
+    return dfout
 
 
 def make_zlr_timeseries(
