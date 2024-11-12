@@ -20,6 +20,6 @@ Methodological details and important caveats are described at https://www.nrel.g
         ```
 
 ## Example usage
-See [analysis/example.py](https://github.com/NREL/DynamicLineRatings/blob/main/analysis/example.py) for an example line rating calculation.
+See [analysis/example_calc.ipynb](https://github.com/NREL/DynamicLineRatings/blob/main/analysis/example_calc.ipynb) for an example line rating calculation.
 
-See [analysis/example_oedi.py](https://github.com/NREL/DynamicLineRatings/blob/main/analysis/example_oedi.py) for an example of how to interact with the precalculated datasets available at https://data.openei.org/submissions/6231.
+See [analysis/example_oedi.ipynb](https://github.com/NREL/DynamicLineRatings/blob/main/analysis/example_oedi.ipynb) for an example of how to interact with the precalculated datasets available at https://data.openei.org/submissions/6231.
