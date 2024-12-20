@@ -18,7 +18,7 @@ lines = os.path.join(data, 'downloads', 'Electric__Power_Transmission_Lines')
 meta_nsrdb = os.path.join(io, 'meta_nsrdb.gpkg')
 meta_wtk = os.path.join(io, 'meta_wtk.gpkg')
 ### External sources
-nsrdb = '/nrel/nsrdb/v3/nsrdb_{year}.h5'
+nsrdb = '/nrel/nsrdb/current/nsrdb_{year}.h5'
 wtk = '/nrel/wtk/conus/wtk_conus_{year}.h5'
 ## Output files
 ratings = os.path.join(outputs, 'ratings')
