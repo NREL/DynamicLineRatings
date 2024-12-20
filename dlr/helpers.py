@@ -10,14 +10,13 @@ import h5py
 from tqdm import tqdm
 import geopandas as gpd
 import h5pyd
-import pyproj
 ## Local
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import physics
 import paths
 import plots
+import fiona
 
-pyproj.network.set_network_enabled(False)
 os.environ['USE_PYGEOS'] = '0'
 
 #%% Constants
@@ -55,6 +54,14 @@ def download(url, path, unzip=True):
         with open(path, 'wb') as f:
             f.write(r.content)
 
+def get_hdf5_file(fpath):
+    assert fpath.endswith('.h5'), "File extension must be .h5"
+    if os.path.exists(fpath):
+        hdf5_file = h5py.File(fpath, 'r')
+    else:
+        hdf5_file = h5pyd.File(fpath, 'r')
+
+    return hdf5_file
 
 ### Geospatial
 def closestpoint(
@@ -234,7 +241,7 @@ def get_reeds_zones(
     return dfmap
 
 
-def get_grids(verbose=False, buffer=40, offshore=True):
+def get_grids(bounds=None, verbose=False, buffer=40, offshore=True):
     """
     Inputs
     - buffer (float): km buffer to include around the contiguous U.S.
@@ -254,15 +261,15 @@ def get_grids(verbose=False, buffer=40, offshore=True):
         or (not os.path.exists(paths.meta_wtk))
     ):
         print('Downloading and caching NSRDB/WTK points (subsequent calls will be faster)')
-        nsrdb_fpath = "/nrel/nsrdb/v3/nsrdb_2012.h5"
-        with h5pyd.File(nsrdb_fpath, 'r') as f:
+        nsrdb_file = get_hdf5_file(paths.meta_nsrdb.format(year=2012))
+        with nsrdb_file as f:
             if verbose:
                 nsrdb_list = list(f)
                 print(nsrdb_list)
             meta['nsrdb'] = pd.DataFrame(f['meta'][...])
 
-        wtk_fpath = "/nrel/wtk/conus/wtk_conus_2012.h5"
-        with h5pyd.File(wtk_fpath, 'r') as f:
+        wtk_file = get_hdf5_file(paths.meta_wtk.format(year=2012))
+        with wtk_file as f:
             if verbose:
                 wtk_list = list(f)
                 print(wtk_list)
@@ -292,7 +299,7 @@ def get_grids(verbose=False, buffer=40, offshore=True):
 
     ### Read them
     for data in ['nsrdb', 'wtk']:
-        meta[data] = gpd.read_file(os.path.join(paths.io, f'meta_{data}.gpkg'))
+        meta[data] = gpd.read_file(os.path.join(paths.io, f'meta_{data}.gpkg'), bbox=bounds)
 
     return meta
 
@@ -309,29 +316,25 @@ def round_voltage(voltage):
 
 
 def read_lines(
-    fpath: str = paths.hifld,
+    fpath: str = paths.lines,
     line_idx_range: slice | None = None,
     crs: str = 'ESRI:102008',
 ):
-    if line_idx_range is None:
-        dflines = gpd.read_file(fpath)
-    else:
-        dflines = gpd.read_file(fpath, rows=line_idx_range)
+    match fpath:
+        case _ if fpath.endswith('.kml'):
+            fiona.supported_drivers['KML'] = 'rw'
+            dflines = gpd.read_file(fpath, driver='KML', rows=line_idx_range)
+        case _:
+            dflines = gpd.read_file(fpath, rows=line_idx_range)
 
-    if str(dflines.crs) != crs:
-        dflines = dflines.to_crs(crs)
-
+    dflines = dflines.set_index('ID').to_crs(crs)
     return dflines
 
 
 def lookup_diameter_resistance(
     dflines,
-    conductor_temp_kelvin: float = 75 + physics.C2K,
+    temp_conductor_kelvin: float = 75 + physics.C2K,
 ):
-    assert (
-        all(col in dflines.columns for col in ["ID", "geometry"])
-    ), "The provided transmission line dataset must contain 'ID' and 'geometry' columns."
-
     assert (
         ("VOLTAGE" in dflines.columns)
         or (all(col in dflines.columns for col in ['diameter', 'resistance']))
@@ -349,17 +352,17 @@ def lookup_diameter_resistance(
             os.path.join(paths.data, "kv_to_conductor_props.csv"),
             index_col="voltage",
         )
-        if conductor_temp_kelvin == 75 + physics.C2K:
+        if temp_conductor_kelvin == 75 + physics.C2K:
             kv_to_conductor_props = (
                 kv_to_conductor_props.rename(columns={"AC_R_75C": "resistance"})
                 [["diameter", "resistance"]]
             )
         else:
-            conductor_temp_celsius = conductor_temp_kelvin - physics.C2K
+            temp_conductor_celsius = temp_conductor_kelvin - physics.C2K
             R_25C = kv_to_conductor_props["AC_R_25C"]
             R_75C = kv_to_conductor_props["AC_R_75C"]
             kv_to_conductor_props["resistance"] = (
-                R_25C + ((R_75C - R_25C) / (75-25)) * (conductor_temp_celsius-25)
+                R_25C + ((R_75C - R_25C) / (75-25)) * (temp_conductor_celsius-25)
             )
             kv_to_conductor_props = (
                 kv_to_conductor_props[["diameter", "resistance"]]
@@ -556,7 +559,7 @@ def calculate_zlr(
 
 
 def get_hifld(
-    fpath=paths.hifld,
+    fpath=paths.lines,
     min_kv=115,
     max_miles=50,
     calc_slr=True,

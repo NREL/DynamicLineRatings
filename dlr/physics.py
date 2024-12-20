@@ -357,6 +357,10 @@ def ampacity(
         resistance_conductor (float): Resistance of conductor [Ω/m]
         absorptivity_conductor (float): Absorptivity of conductor. Defaults to 0.8.
         emissivity_conductor (float): Emissivity of conductor. Defaults to 0.8.
+        forecast_margin (dict[str, numeric]): Additive adjustments to apply to each
+            weather parameter
+        check_units (bool): Check that provided temperature and pressure values are within
+            reasonable ranges (assuming units of K and Pa respectively)
 
     Returns:
         current (numeric): Rated ampacity [A]

@@ -6,11 +6,13 @@ import sys
 from tqdm import tqdm
 import geopandas as gpd
 import shapely
+import h5py
 import h5pyd
 ## Local
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import helpers
 import paths
+from dlr import physics
 
 os.environ['USE_PYGEOS'] = '0'
 
@@ -27,28 +29,19 @@ def get_cells(line, meta=None, buffer_km=10):
     """
     ## Get raster of weather points if necessary
     if meta is None:
-        meta = helpers.get_grids()
-
-    ## Add a buffer around the line to avoid edge effects
-    linebuffer = line.geometry.buffer(buffer_km * 1e3)
-    linebounds = dict(zip(['minx','miny','maxx','maxy'], linebuffer.bounds))
+        ## Add a buffer around the line to avoid edge effects
+        linebuffer = line.geometry.buffer(buffer_km * 1e3)
+        meta = helpers.get_grids(bounds=linebuffer.bounds)
 
     ## Get Voronoi polygons for cells
     voronois = {}
     keep_cells = {}
     for data in ['nsrdb','wtk']:
-        df = meta[data].loc[
-            (linebounds['miny'] <= meta[data].y)
-            & (meta[data].y <= linebounds['maxy'])
-            & (linebounds['minx'] <= meta[data].x)
-            & (meta[data].x <= linebounds['maxx'])
-        ]
-        voronois[data] = helpers.voronoi_polygons(df[['x','y','i']])
-
-        voronois[data]['i'] = df.iloc[
+        voronois[data] = helpers.voronoi_polygons(meta[data][['x','y','i']])
+        voronois[data]['i'] = meta[data].iloc[
             helpers.closestpoint(
                 voronois[data],
-                df,
+                meta[data],
                 dfquerylabel=None, 
                 dfqueryx='centroid_x',
                 dfqueryy='centroid_y', 
@@ -156,8 +149,8 @@ def get_segment_azimuths(line, cell_combinations, full_output=False):
 
 def get_weather_h5py(
     line,
+    weather2data,
     meta=None,
-    weatherlist=['temperature','windspeed','winddirection','pressure','ghi'],
     height=10,
     years=range(2007,2014),
     verbose=0,
@@ -180,7 +173,7 @@ def get_weather_h5py(
         'clearsky_ghi',
         'ghi',
     ]
-    for i in weatherlist:
+    for i in weather2data.keys():
         assert i in allowed_weatherlist, (
             f"Provided {i} in weatherlist but only the following are allowed:\n"
             + '\n> '.join(allowed_weatherlist)
@@ -194,15 +187,7 @@ def get_weather_h5py(
     if isinstance(years, (int, float)):
         years = [int(years)]
 
-    ## Convenience dicts
-    weather2data = {
-        'temperature': 'wtk',
-        'windspeed': 'wtk',
-        'winddirection': 'wtk',
-        'pressure': 'wtk',
-        'clearsky_ghi': 'nsrdb',
-        'ghi': 'nsrdb',
-    }
+    ## Convenience dict
     weather2datum = {
         'temperature': f'temperature_{height}m',
         'windspeed': f'windspeed_{height}m',
@@ -211,11 +196,12 @@ def get_weather_h5py(
         'clearsky_ghi': 'clearsky_ghi',
         'ghi': 'ghi',
     }
+    weather2datum = {k:v for k,v in weather2datum.items() if k in weather2data.keys()}
     datum2weather = {v:k for k,v in weather2datum.items()}
     datums = {
         data: sorted(set([
             datum for weather,datum in weather2datum.items()
-            if ((weather in weatherlist) and (weather2data[weather] == data))
+            if weather2data[weather] == data
         ]))
         for data in ['wtk', 'nsrdb']
     }
@@ -230,23 +216,148 @@ def get_weather_h5py(
     for (data, datum, year) in iterator:
         weather = datum2weather[datum]
         indices = keep_cells[data].i.sort_values().values
-        with h5pyd.File(fpaths[data].format(year=year), 'r') as f:
+        fpath = fpaths[data].format(year=year)
+        
+        hdf5_file = helpers.get_hdf5_file(fpath)
+        with hdf5_file as f:
             time_index = pd.to_datetime(f['time_index'][...].astype(str))
             dictweather[weather,year] = pd.DataFrame(
                 f[datum][:,indices],
                 index=time_index,
                 columns=indices,
             ) * scale[data]
-            ## NSRDB has 30-minute resolution, so downsample to 60-minute to match WTK
+            ## NSRDB has localized timestamps at 30-minute resolution, so
+            # delocalize and downsample to 60-minute to match WTK
             if data == 'nsrdb':
-                dictweather[weather,year] = dictweather[weather,year].iloc[::2]
+                dictweather[weather,year] = (
+                    dictweather[weather,year]
+                    .set_index([idx.tz_localize(None) for idx in dictweather[weather,year].index])
+                    .iloc[::2]
+                )
             ## Pressure is in kPa but needs to be in Pa
             if datum.startswith('pressure'):
                 dictweather[weather,year] *= 1e3
 
     dfweather = {
         weather: pd.concat([dictweather[weather,year] for year in years])
-        for weather in weatherlist
+        for weather in weather2data.keys()
     }
 
     return dfweather
+
+def calc_ratings(
+    line: gpd.GeoSeries,
+    years: int | list[int] = list(range(2007, 2014)),
+    windspeed: float | str = 0.61,
+    pressure: float | str = 101325,
+    temp_ambient_air: float | str = 40 + physics.C2K,
+    wind_conductor_angle: float | str = 90,
+    solar_ghi: float | str = 1000,
+    temp_conductor: float | str = 75 + physics.C2K,
+    emissivity_conductor: float | str = 0.8,
+    absorptivity_conductor: float | str = 0.8,
+    forecast_margin: dict = {},
+    check_units: bool = True,
+):
+    """Calculate hourly ratings for a given line as a function of weather and conductor parameters.
+
+    Args:
+        line: gpd.GeoSeries
+        years: int or list representing year(s) of historic weather data
+        windspeed (numeric, str): Static windspeed [m/s] or data source for variable windspeed 
+            (e.g., 'wtk')
+        pressure (numeric, str): Static air pressure [Pa] or data source for variable pressure 
+            (e.g., 'wtk')
+        temp_ambient_air (numeric, str): Static air temperature [K] or data source for variable temp
+            (e.g., 'wtk')
+        wind_conductor_angle (numeric): Static angle between wind direction and line segment [°] or
+            data source for variable wind direction (e.g., 'wtk')
+        solar_ghi (numeric): Static solar global horizontal irradiance [W m^-2] or '-'-delimited
+            pair of variable irradiance data source and irradiance type (e.g., 'nsrdb-ghi')
+        temp_conductor (float): Maximum allowable temperature of conductor [K].
+            Default of 75°C + C2K = 348.15 K is a rule of thumb for ACSR conductors.
+        diameter_conductor (float): Diameter of conductor [m]
+        resistance_conductor (float): Resistance of conductor [Ω/m]
+        absorptivity_conductor (float): Absorptivity of conductor. Defaults to 0.8.
+        emissivity_conductor (float): Emissivity of conductor. Defaults to 0.8.
+        forecast_margin (dict[str, numeric]): Additive adjustments to apply to each
+            weather parameter
+        check_units (bool): Check that provided temperature and pressure values are within
+            reasonable ranges (assuming units of K and Pa respectively)
+
+    Returns:
+        current (numeric): Rated ampacity [A]
+    """
+    ### Get grid cells
+    keep_cells = get_cells(line=line, buffer_km=10)
+    cell_combinations = get_cell_overlaps(keep_cells=keep_cells)
+
+    ### Get weather data
+    weather2data = {
+        'temperature': temp_ambient_air,
+        'windspeed': windspeed,
+        'winddirection': wind_conductor_angle,
+        'pressure': pressure
+    }
+    weather2data = {k:v for k,v in weather2data.items() if isinstance(v, str)}
+    if isinstance(solar_ghi, str):
+        ghi_source, ghi_type = solar_ghi.split('-')
+        weather2data[ghi_type] = ghi_source
+
+    dfweather = get_weather_h5py(
+        line=line,
+        weather2data=weather2data,
+        years=years,
+        verbose=1,
+    )
+    windspeed_data = dfweather.get('windspeed', {})
+    temp_ambient_air_data = dfweather.get('temperature', {})
+    if isinstance(temp_ambient_air_data, pd.DataFrame):
+        temp_ambient_air_data += physics.C2K
+    pressure_data = dfweather.get('pressure', {})
+    solar_ghi_data = dfweather.get(ghi_type, {})
+
+    if 'winddirection' in dfweather:
+        ### Get segment angles from North
+        line_segments = get_segment_azimuths(
+            line=line, cell_combinations=cell_combinations)
+
+        ### Calculate ratings for all segments        
+        segment_ampacity = {}
+        for segment, (i_wtk, i_nsrdb, azimuth) in line_segments.iterrows():
+            segment_ampacity[segment] = physics.ampacity(
+                windspeed=windspeed_data.get(i_wtk, windspeed),
+                wind_conductor_angle=(dfweather['winddirection'][i_wtk] - azimuth),
+                temp_ambient_air=temp_ambient_air_data.get(i_wtk, temp_ambient_air),
+                pressure=pressure_data.get(i_wtk, pressure),
+                solar_ghi=solar_ghi_data.get(i_nsrdb, solar_ghi),
+                temp_conductor=temp_conductor,
+                diameter_conductor=line.diameter,
+                resistance_conductor=line.resistance,
+                emissivity_conductor=emissivity_conductor,
+                absorptivity_conductor=absorptivity_conductor,
+                forecast_margin=forecast_margin,
+                check_units=check_units
+            )
+        min_ratings = pd.concat(segment_ampacity, axis=1).min(axis=1)
+    else:
+        ### Because we're not using wind direction we only need cell combinations, not segments
+        cell_ampacity = {}
+        for (i_wtk, i_nsrdb) in cell_combinations.index:
+            cell_ampacity[(i_wtk, i_nsrdb)] = physics.ampacity(
+                windspeed=windspeed_data.get(i_wtk, windspeed),
+                wind_conductor_angle=wind_conductor_angle,
+                temp_ambient_air=temp_ambient_air_data.get(i_wtk, temp_ambient_air),
+                pressure=pressure_data.get(i_wtk, pressure),
+                solar_ghi=solar_ghi_data.get(i_nsrdb, solar_ghi),
+                temp_conductor=temp_conductor,
+                diameter_conductor=line.diameter,
+                resistance_conductor=line.resistance,
+                emissivity_conductor=emissivity_conductor,
+                absorptivity_conductor=absorptivity_conductor,
+                forecast_margin=forecast_margin,
+                check_units=check_units
+            )
+        min_ratings = pd.concat(cell_ampacity, axis=1).min(axis=1)
+
+    return min_ratings
